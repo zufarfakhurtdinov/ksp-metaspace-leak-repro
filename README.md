@@ -13,10 +13,17 @@ A KSP2 run in the Gradle daemon starts threads in the KSP engine classloader tha
 These threads keep the Gradle classloader that loaded the KSP Gradle plugin reachable: the periodic thread through its
 context classloader, the coroutine workers through their inherited access control context.
 
-When a project's build script classpath changes, Gradle creates a new classloader for its plugins. This happens, for
-example, after an edit to an included `build-logic` build or a plugin version change. The old threads keep the old
-loader alive, and that loader keeps the KSP Gradle plugin classes and the Analysis API classes they loaded. Metaspace
-grows with each change until the daemon fails with `OutOfMemoryError: Metaspace`.
+Each time Gradle loads the KSP Gradle plugin in a new classloader, the previous classloader leaks, together with the
+plugin classes and the Analysis API classes it loaded. Gradle does this when the build script classpath of a project
+that applies KSP changes, for example after:
+
+- an edit to the code of an included build that provides plugins, such as `build-logic`;
+- adding, removing or upgrading another plugin in the same `plugins {}` block;
+- a change to a `buildscript` dependency. This project uses this case.
+
+Switching to a branch where any of these differs has the same effect, and so does switching back. Editing a build
+script without changing its classpath does not leak. Metaspace grows with each change until the daemon fails with
+`OutOfMemoryError: Metaspace`.
 
 Path from a GC root, from a heap dump of this project:
 
